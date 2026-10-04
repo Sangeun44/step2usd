@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "step2usd"
+version = "0.1.0"
+description = "Convert STEP assemblies to OpenUSD, keeping the product structure, instancing and exact mass properties."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "cadquery-ocp>=8.0",
+    "usd-core>=25.5",
+    "numpy>=1.26",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+preview = ["pillow>=10"]
+
+[project.scripts]
+step2usd = "step2usd.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
