@@ -122,6 +122,34 @@ flowchart LR
   /Rib/Mesh
 ```
 
+## Isaac Sim example
+
+`examples/isaac_drop_test.py` takes a converted assembly into NVIDIA Isaac Sim
+and checks the simulation against the CAD model:
+
+```bat
+step2usd convert examples\bracket_assembly.step -o out\bracket.usda --density 7850
+C:\isaacsim\python.bat examples\isaac_drop_test.py out\bracket.usda
+```
+
+It builds a small scene around the asset (ground, gravity, lights, camera),
+opens it in Isaac Sim, drops the part from 10 cm and waits for it to come to
+rest. Then it compares three things with what the CAD model implies:
+
+| Check | Simulator says | CAD says |
+| --- | --- | --- |
+| Mass | PhysX's computed mass for the rigid body | density x exact B-rep volume |
+| Rest height | where the part's origin ends up | distance from origin to its lowest point |
+| Tilt | how far it leans once at rest | zero, for a part that lands flat |
+
+A mass mismatch means the colliders or masses did not survive the trip into
+the simulator, which is exactly what a CAD-to-sim pipeline needs to catch. It
+also saves a rendered image and a JSON result next to the asset.
+
+Run it with Isaac Sim's own Python, not the project environment. Add `--gui`
+to watch, or `--build-only` to write just the scene and open it by hand
+(File > Open, then Play).
+
 ## Tests
 
 The tests run against a generated assembly (`examples/make_sample.py`) whose
@@ -137,7 +165,9 @@ Tested with `cadquery-ocp` 8.0 and `usd-core` 26.8 on Python 3.13.
 - So far it has only been run on the generated sample. Real-world STEP files
   (large assemblies, surface bodies, odd exporters) are the next thing to try.
 - The output has been checked through the USD API and the preview rasteriser,
-  not yet opened in usdview, Omniverse or Isaac Sim.
+  not yet opened in usdview or Omniverse.
+- The Isaac Sim example's scene-building half is covered by tests. The simulation
+  half has not been run yet, so expect to adjust it on first contact with Isaac Sim.
 - Mesh extraction loops over vertices in Python, so very large models will be slow.
 - Colours become `displayColor` only; there are no materials.
 - Colliders use a convex hull per part, which fills in holes and pockets.
@@ -146,7 +176,7 @@ Tested with `cadquery-ocp` 8.0 and `usd-core` 26.8 on Python 3.13.
 ## Next steps
 
 - [ ] Run on public STEP files (for example the NIST CAD test cases) and fix what breaks
-- [ ] Open the result in usdview and Isaac Sim
+- [ ] Run `examples/isaac_drop_test.py` in Isaac Sim and add its image here
 - [ ] UsdPreviewSurface materials from CAD colours
 - [ ] Vectorise mesh extraction
 - [ ] Convex decomposition option for concave parts
