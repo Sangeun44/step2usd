@@ -5,12 +5,12 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "step2usd"
 version = "0.1.0"
-description = "Convert STEP assemblies to OpenUSD, keeping the product structure, instancing and exact mass properties."
+description = "Convert STEP assemblies and Gaussian splat captures to OpenUSD."
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "cadquery-ocp>=8.0",
-    "usd-core>=25.5",
+    "usd-core>=26.3",
     "numpy>=1.26",
 ]
 
