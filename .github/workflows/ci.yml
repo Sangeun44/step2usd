@@ -20,6 +20,8 @@ jobs:
       - run: pytest -q
       # Convert the sample; the command fails if the result does not match the CAD bounds.
       - run: step2usd convert examples/bracket_assembly.step -o out/bracket.usda --density 7850 --report out/report.json
+      # Convert the sample Gaussian splat; fails if the USD does not read back identically.
+      - run: step2usd splat examples/bracket_splat.ply -o out/bracket_splat.usdc --report out/splat_report.json
       - uses: actions/upload-artifact@v4
         with:
           name: bracket-${{ matrix.os }}

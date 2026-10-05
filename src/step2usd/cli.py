@@ -1,4 +1,4 @@
-"""Command line: step2usd {convert,inspect}."""
+"""Command line: step2usd {convert,inspect,splat,sample-splat}."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ from pathlib import Path
 from .model import Node, Scene
 from .reader import StepReadError, read_step
 from .report import build_report
+from .splat import SplatWriteOptions, convert_splat, splats_from_scene, write_ply
 from .writer import WriteOptions, write_usd
 
 
@@ -99,6 +100,40 @@ def _cmd_inspect(args) -> int:
     return 0
 
 
+def _cmd_splat(args) -> int:
+    options = SplatWriteOptions(
+        up_axis=args.up_axis, meters_per_unit=args.meters_per_unit, rotate_x=args.rotate_x
+    )
+    output = args.output or args.input.with_suffix(".usdc")
+    report = convert_splat(args.input, output, options, args.min_opacity)
+    if args.report:
+        args.report.parent.mkdir(parents=True, exist_ok=True)
+        args.report.write_text(json.dumps(report, indent=2) + "\n")
+
+    dropped = report["dropped"]
+    print(f"{report['source']} -> {report['output']}  ({report['up_axis']} up)")
+    print(f"  {report['gaussians_written']} Gaussians, spherical-harmonics degree {report['sh_degree']}")
+    if dropped["non_finite"] or dropped["below_min_opacity"]:
+        print(
+            f"  dropped {dropped['non_finite']} with non-finite values, "
+            f"{dropped['below_min_opacity']} below the opacity threshold"
+        )
+    lo, hi = report["bounds"]
+    size = " x ".join(f"{b - a:.3g}" for a, b in zip(lo, hi))
+    print(f"  bounds {size} units, {report['opacity']['nearly_transparent']} nearly transparent")
+    ok = report["round_trip"]["ok"]
+    print("  read back from USD: identical" if ok else "  READ-BACK MISMATCH: see the report")
+    return 0 if ok else 1
+
+
+def _cmd_sample_splat(args) -> int:
+    scene = read_step(args.input, args.linear_deflection)
+    output = args.output or args.input.with_suffix(".ply")
+    write_ply(splats_from_scene(scene, args.count), output)
+    print(f"{scene.source} -> {output.name}  ({args.count} Gaussians sampled from the CAD surfaces, metres)")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="step2usd", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -122,6 +157,26 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("inspect", help="print the assembly tree of a STEP file")
     p.add_argument("input", type=Path)
     p.set_defaults(func=_cmd_inspect)
+
+    p = sub.add_parser("splat", help="convert a 3D Gaussian Splatting .ply to a USD ParticleField")
+    p.add_argument("input", type=Path)
+    p.add_argument("-o", "--output", type=Path, help=".usdc, .usda or .usd (default: .usdc next to the input)")
+    p.add_argument("--up-axis", choices=("Z", "Y"), default="Z", help="stage up axis (default: Z)")
+    p.add_argument("--meters-per-unit", type=float, default=1.0,
+                   help="size of one capture unit in metres, if known (default: 1.0)")
+    p.add_argument("--rotate-x", type=float, default=0.0, metavar="DEG",
+                   help="turn the capture about X on the root prim, e.g. 180 for a COLMAP-oriented scene")
+    p.add_argument("--min-opacity", type=float, default=0.0,
+                   help="drop Gaussians fainter than this, e.g. 0.02 (default: keep all)")
+    p.add_argument("--report", type=Path, help="write the JSON report here")
+    p.set_defaults(func=_cmd_splat)
+
+    p = sub.add_parser("sample-splat", help="sample a STEP model's surfaces into a synthetic splat .ply")
+    p.add_argument("input", type=Path)
+    p.add_argument("-o", "--output", type=Path, help=".ply (default: next to the input)")
+    p.add_argument("--count", type=int, default=12000, help="number of Gaussians (default: 12000)")
+    p.add_argument("--linear-deflection", type=float, default=0.1, metavar="MM")
+    p.set_defaults(func=_cmd_sample_splat)
 
     args = parser.parse_args(argv)
     try:

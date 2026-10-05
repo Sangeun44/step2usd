@@ -1,6 +1,7 @@
 # step2usd
 
 Convert STEP assemblies to OpenUSD without flattening them into a bag of triangles.
+Also converts Gaussian splat captures to OpenUSD's native splat prim.
 
 A plain mesh export of a CAD model loses most of what made it an engineering
 model: which parts exist, what they are called, which forty bolts are really
@@ -150,6 +151,54 @@ Run it with Isaac Sim's own Python, not the project environment. Add `--gui`
 to watch, or `--build-only` to write just the scene and open it by hand
 (File > Open, then Play).
 
+## Gaussian splats
+
+`step2usd splat` converts a 3D Gaussian Splatting capture from the usual
+training-output `.ply` into OpenUSD's native splat prim,
+`UsdVol.ParticleField3DGaussianSplat` (added in OpenUSD 26.03):
+
+```console
+$ step2usd splat examples/bracket_splat.ply -o out/bracket_splat.usdc
+bracket_splat.ply -> bracket_splat.usdc  (Z up)
+  12000 Gaussians, spherical-harmonics degree 0
+  bounds 0.127 x 0.087 x 0.082 units, 0 nearly transparent
+  read back from USD: identical
+```
+
+The two formats hold the same Gaussians under different conventions, and the
+converter does the translation:
+
+| In the `.ply` | In the USD prim |
+| --- | --- |
+| `scale_*`: log of the standard deviation | `scales`: linear |
+| `opacity`: logit, before the sigmoid | `opacities`: linear, 0 to 1 |
+| `rot_0..3`: w, x, y, z, not normalised | `orientations`: unit quaternions |
+| `f_dc_*`, `f_rest_*`: grouped by colour channel | SH coefficients grouped per Gaussian |
+
+Options: `--min-opacity` drops Gaussians too faint to matter, `--rotate-x`
+stands a capture upright with a transform on the root prim (the Gaussians
+themselves are not rewritten), and `--up-axis` / `--meters-per-unit` set the
+stage metadata. After writing, the stage is read back and compared with what
+went in; the command fails if they differ.
+
+![The sample splat, drawn by examples/preview_splat.py](docs/preview_splat.png)
+
+### A splat of a CAD model
+
+`step2usd sample-splat` goes the other way round the usual capture pipeline: it
+samples a STEP model's surfaces into flat, surface-aligned Gaussians and writes
+a standard splat `.ply`.
+
+```bash
+step2usd sample-splat examples/bracket_assembly.step -o out/bracket_splat.ply --count 12000
+```
+
+That gives a splat that sits in exactly the same coordinates as the mesh and
+collider version from `step2usd convert`, which is useful as test data and for
+placing a known part inside a captured scene. It is a synthetic splat, not a
+trained one: colours are the CAD colours with one baked light, and there is no
+view-dependent appearance. `examples/bracket_splat.ply` was made this way.
+
 ## Tests
 
 The tests run against a generated assembly (`examples/make_sample.py`) whose
@@ -166,6 +215,11 @@ Tested with `cadquery-ocp` 8.0 and `usd-core` 26.8 on Python 3.13.
   (large assemblies, surface bodies, odd exporters) are the next thing to try.
 - The output has been checked through the USD API and the preview rasteriser,
   not yet opened in usdview or Omniverse.
+- Splat import has been tested on generated data and hand-built files in the
+  standard layout, not yet on a trained capture, and the output has not been
+  opened in a splat renderer other than the small one in `examples/`.
+- Spherical-harmonics coefficients are copied across as stored; this assumes the
+  renderer uses the original 3DGS colour convention.
 - The Isaac Sim example's scene-building half is covered by tests. The simulation
   half has not been run yet, so expect to adjust it on first contact with Isaac Sim.
 - Mesh extraction loops over vertices in Python, so very large models will be slow.
@@ -177,6 +231,8 @@ Tested with `cadquery-ocp` 8.0 and `usd-core` 26.8 on Python 3.13.
 
 - [ ] Run on public STEP files (for example the NIST CAD test cases) and fix what breaks
 - [ ] Run `examples/isaac_drop_test.py` in Isaac Sim and add its image here
+- [ ] Convert a trained capture and open it in Isaac Sim, which renders ParticleField prims
+- [ ] Compose a splat scene with a converted CAD part: captured look, exact colliders
 - [ ] UsdPreviewSurface materials from CAD colours
 - [ ] Vectorise mesh extraction
 - [ ] Convex decomposition option for concave parts
